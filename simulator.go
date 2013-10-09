@@ -26,15 +26,7 @@ func InitSimulation(vehicle *Vehicle) *SimulatorState {
 
 func (state *SimulatorState)Tick(accel float64) {    
     vehicle := state.Vehicle
-    
-    //clamp the accel to what the tires can provide
-    max := vehicle.Tires.Friction * 9.81
-    if accel > max {
-        accel = max
-    } else if accel < -max {
-        accel = -max
-    }
-    
+        
     //make sure we are not accelerating over the max motor RPM
     if state.Speed + (accel * state.Interval) > state.topMotorSpeed {
         accel = (state.topMotorSpeed - state.Speed)/state.Interval
@@ -51,6 +43,12 @@ func (state *SimulatorState)Tick(accel float64) {
         force = math.Copysign(maxForce, force)
     }
     
+    //limit the force to what the tires can grip
+    maxForce = vehicle.Tires.Friction * 9.81 * vehicle.Weight;
+    if math.Abs(force) > maxForce {
+        force = math.Copysign(maxForce, force)
+    }
+    
     //recalculate the maximum acceleration using the actual force available
     accel = (force - drag)/vehicle.Weight
     
@@ -61,13 +59,16 @@ func (state *SimulatorState)Tick(accel float64) {
     power := (force * speed)/(vehicle.ElectricalEff * vehicle.DrivetrainEff)
     power += vehicle.Accessory
     
-    state.Coulombs += vehicle.Battery.ampsAtPower(power) * state.Interval
+    amps := vehicle.Battery.ampsAtPower(power)
+    
+    state.Coulombs += amps * state.Interval
     
     state.Distance += speed * state.Interval
     state.Speed += accel * state.Interval
     state.Time += state.Interval
     
-    state.PowerUse = power
+    //power drawn from battery
+    state.PowerUse = amps * vehicle.Battery.NominalVoltage
     state.Acceleration = accel
     
     return

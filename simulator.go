@@ -1,6 +1,7 @@
 package automotiveSim
 
 import "math"
+import "fmt"
 
 type SimulatorState struct {
     Vehicle *Vehicle
@@ -13,6 +14,11 @@ type SimulatorState struct {
     Acceleration float64
     PowerUse float64
     topMotorSpeed float64
+}
+
+type SimulatorRun struct {
+    Interval float64
+    Speeds []float64
 }
 
 
@@ -77,3 +83,25 @@ func (state *SimulatorState)Tick(accel float64) {
 func (state *SimulatorState)energyUsed() float64 {
     return state.Coulombs * state.Vehicle.Battery.NominalVoltage
 }
+
+func RunInput(input *SimulatorRun, vehicle *Vehicle) (float64, error) {
+    sim := InitSimulation(vehicle)
+    for _,newSpeed := range input.Speeds {
+        accel := (newSpeed - sim.Speed)/input.Interval
+        numTicks := int(input.Interval/sim.Interval)
+        for i := 0; i < numTicks; i++ {
+            sim.Tick(accel);
+            if math.Abs(sim.Acceleration - accel) > 0.01 {
+                return 0, fmt.Errorf("Car failed to accelerate at %5.2fm/s (only %5.2f)", accel, sim.Acceleration)
+            }
+        }
+    }
+    return sim.energyUsed()/sim.Distance, nil
+}
+
+
+
+
+
+
+

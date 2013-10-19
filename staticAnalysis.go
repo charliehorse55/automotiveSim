@@ -17,9 +17,15 @@ func airDensity(temperature float64) float64 {
 }
 
 func (vehicle *Vehicle)Drag(speed float64) float64 {
-    force := 0.5 * vehicle.CdA * speed * speed * airDensity(vehicle.ExternalTemp) //aero
-    force += vehicle.Weight * 9.81 * vehicle.Tires.RollingResistance           //tires
-    return force
+	return vehicle.RollingDrag(speed) + vehicle.AeroDrag(speed)
+}
+
+func (vehicle *Vehicle)AeroDrag(speed float64) float64 {
+    return 0.5 * vehicle.CdA * speed * speed * airDensity(vehicle.ExternalTemp) //aero
+}
+
+func (vehicle *Vehicle)RollingDrag(speed float64) float64 {
+	return vehicle.Weight * 9.81 * vehicle.Tires.RollingResistance
 }
 
 func (vehicle *Vehicle)PowerUse(speed float64) float64 {

@@ -3,7 +3,10 @@ package automotiveSim
 import "math"
 import "fmt"
 
-type SimulatorRun struct {
+const quarterMile = 402.33600
+
+type Schedule struct {
+	Name string
     Interval float64
     Speeds []float64
 }
@@ -12,11 +15,18 @@ func (state *SimulatorState)energyUsed() float64 {
     return state.Coulombs * state.Vehicle.Battery.NominalVoltage
 }
 
-func (vehicle *Vehicle)RunInput(input *SimulatorRun) ([]float64, error) {
+type ScheduleResult struct {
+	Power []float64
+	Distance float64
+	
+}
+
+func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
     sim := InitSimulation(vehicle)
     
 	numTicks := int(input.Interval/sim.Interval)
-	Power := make([]float64, len(input.Speeds))
+	var result ScheduleResult
+	result.Power = make([]float64, len(input.Speeds))
     for i,newSpeed := range input.Speeds {
         accel := (newSpeed - sim.Speed)/input.Interval
 		var powerUsage float64
@@ -26,15 +36,53 @@ func (vehicle *Vehicle)RunInput(input *SimulatorRun) ([]float64, error) {
 				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f)", accel, sim.Acceleration)
             }
 			if sim.Coulombs > vehicle.Battery.Coulomb {
-				return nil, fmt.Errorf("Battery depleted before test completion")
+				return nil, fmt.Errorf("Battery depleted before end of test")
 			}
 			powerUsage += sim.TotalPowerUse()
         }
-		Power[i] = powerUsage/float64(numTicks)
+		result.Power[i] = powerUsage/float64(numTicks)
     }
-    return Power, nil
+	result.Distance = sim.Distance
+    return &result, nil
 }
 
+type AccelProfile struct {
+	TopSpeed float64
+	Accel100 float64
+	QuarterMile float64
+	AccelTop float64
+	PeakAccel float64
+}
+
+func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
+	sim := InitSimulation(vehicle)
+	
+	var result AccelProfile
+	for result.TopSpeed == 0 || result.QuarterMile == 0 {
+		sim.Tick(10000)
+		if sim.Acceleration > result.PeakAccel {
+			result.PeakAccel = sim.Acceleration
+		}
+		
+		if sim.Speed > (100/3.6) && result.Accel100 == 0 {
+			result.Accel100 = sim.Time
+		}
+		
+		if sim.Distance > quarterMile && result.QuarterMile == 0 {
+			result.QuarterMile = sim.Time
+		}
+		
+		//have we hit topspeed
+		if sim.Acceleration < 0.01  && result.TopSpeed == 0{
+			result.TopSpeed = sim.Speed
+			result.AccelTop = sim.Time
+			if sim.Speed < (100/3.6) {
+				result.Accel100 = math.NaN()
+			}
+		}
+	}
+	return result, nil
+}
 
 type PowerDraw struct {
 	Sources []string

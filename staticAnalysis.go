@@ -86,13 +86,3 @@ func (vehicle *Vehicle)ContinuousForce(speed float64) float64 {
     return vehicle.force(speed, false)
 }
 
-func (vehicle *Vehicle)CanMoveAtSpeed(speed float64) bool {
-    if speed > vehicle.MotorShaftSpeedLimit() {
-        return false
-    }
-    if vehicle.Drag(speed) > vehicle.ContinuousForce(speed) {
-        return false
-    }
-    return true
-}
-

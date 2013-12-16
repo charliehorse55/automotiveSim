@@ -3,7 +3,10 @@ package automotiveSim
 import "math"
 import "fmt"
 
-const quarterMile = 402.33600
+const (
+	kph100 = 100 / 3.6
+	quarterMile = 402.33600
+)
 
 type Schedule struct {
 	Name string
@@ -18,12 +21,14 @@ func (state *SimulatorState)energyUsed() float64 {
 type ScheduleResult struct {
 	Power []float64
 	Distance float64
-	
 }
 
 func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
-    sim := InitSimulation(vehicle)
-    
+    sim, err := InitSimulation(vehicle)
+    if err != nil {
+    	return nil, err
+    }
+	
 	numTicks := int(input.Interval/sim.Interval)
 	var result ScheduleResult
 	result.Power = make([]float64, len(input.Speeds))
@@ -31,9 +36,9 @@ func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
         accel := (newSpeed - sim.Speed)/input.Interval
 		var powerUsage float64
         for i := 0; i < numTicks; i++ {
-            sim.Tick(accel);
-            if math.Abs(sim.Acceleration - accel) > 0.01 {
-				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f)", accel, sim.Acceleration)
+            currAccel := sim.Tick(accel);
+            if math.Abs(currAccel - accel) > 0.01 {
+				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f)", accel, currAccel)
             }
 			if sim.Coulombs > vehicle.Battery.Coulomb {
 				return nil, fmt.Errorf("Battery depleted before end of test")
@@ -55,16 +60,19 @@ type AccelProfile struct {
 }
 
 func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
-	sim := InitSimulation(vehicle)
+	sim, err := InitSimulation(vehicle)
+    if err != nil {
+    	return AccelProfile{}, err
+    }
 	
 	var result AccelProfile
 	for result.TopSpeed == 0 || result.QuarterMile == 0 {
-		sim.Tick(10000)
-		if sim.Acceleration > result.PeakAccel {
-			result.PeakAccel = sim.Acceleration
+		currAccel := sim.Tick(10000)
+		if currAccel > result.PeakAccel {
+			result.PeakAccel = currAccel
 		}
 		
-		if sim.Speed > (100/3.6) && result.Accel100 == 0 {
+		if sim.Speed > kph100 && result.Accel100 == 0 {
 			result.Accel100 = sim.Time
 		}
 		
@@ -73,10 +81,10 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 		}
 		
 		//have we hit topspeed
-		if sim.Acceleration < 0.01  && result.TopSpeed == 0{
+		if currAccel < 0.01  && result.TopSpeed == 0 {
 			result.TopSpeed = sim.Speed
 			result.AccelTop = sim.Time
-			if sim.Speed < (100/3.6) {
+			if sim.Speed < kph100 {
 				result.Accel100 = math.NaN()
 			}
 		}
@@ -86,19 +94,25 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 
 type PowerDraw struct {
 	Sources []string
+	Speeds []float64
 	Magnitude []VehiclePowerUse
 }
 
 func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
-    sim := InitSimulation(vehicle)
+	sim, err := InitSimulation(vehicle)
+    if err != nil {
+    	return nil, err
+    }
 	
 	var power PowerDraw
-	power.Sources = PowerDrawSources
+	power.Sources = make([]string, len(PowerDrawSources))
+	copy(power.Sources, PowerDrawSources)
+	power.Speeds = speeds
 	power.Magnitude = make([]VehiclePowerUse, len(speeds))
 	for i,speed := range speeds {
 		sim.Speed = speed
-		sim.Tick(0)
-		if math.Abs(sim.Acceleration) > 0.01 {
+		currAccel := sim.Tick(0)
+		if math.Abs(currAccel) > 0.01 {
 			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f", speed)
 		} 
 		power.Magnitude[i] = sim.PowerUse

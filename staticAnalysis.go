@@ -4,7 +4,9 @@ import "math"
 
 
 func (pack *BatteryPack)ampsAtPower(power float64) float64  {
-    return (2 * power) / (pack.NominalVoltage  + math.Sqrt(pack.NominalVoltage*pack.NominalVoltage - 4*power*pack.InternalResistance))
+	absPow := math.Abs(power)
+    amps := (2 * absPow) / (pack.NominalVoltage  + math.Sqrt(pack.NominalVoltage*pack.NominalVoltage - 4*absPow*pack.InternalResistance))
+	return math.Copysign(amps, power)
 
 }
 
@@ -30,11 +32,6 @@ func (vehicle *Vehicle)RollingDrag(speed float64) float64 {
 
 func (vehicle *Vehicle)PowerUse(speed float64) float64 {
     return (vehicle.Drag(speed) * speed)/(vehicle.ElectricalEff * vehicle.DrivetrainEff) + vehicle.Accessory
-}
-
-// Maximize the function E = P/v
-func (vehicle *Vehicle)MostEfficientSpeed() float64 {
-    return math.Cbrt((vehicle.Accessory*vehicle.DrivetrainEff*vehicle.ElectricalEff)/(vehicle.CdA*airDensity(vehicle.ExternalTemp)))
 }
 
 //the fastest the vehicle can possibly go without exceeding the redline of any of it's motors

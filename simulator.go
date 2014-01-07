@@ -3,6 +3,8 @@ package automotiveSim
 import (
 	"math"
 	"fmt"
+	"time"
+	"errors"
 )
 	
 const (
@@ -20,25 +22,23 @@ var PowerDrawSources []string = []string{"Rolling Resistance", "Accessory", "Ine
 // no way that I am aware of to do this automatically in golang
 type VehiclePowerUse [5]float64
 
+
+
 type SimulatorState struct {
     Vehicle *Vehicle
     
-    Time float64
+    Time time.Duration
     Speed float64
     Distance float64
     Coulombs float64
-    Interval float64
+    Interval time.Duration
     PowerUse VehiclePowerUse
-    topMotorSpeed float64
 }
-
 
 func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
     var state SimulatorState
     state.Vehicle = vehicle
-    state.Interval = 0.001; // 1ms default interval
-    state.topMotorSpeed = vehicle.MotorShaftSpeedLimit()
-	
+    state.Interval = 1 * time.Millisecond; // 1ms default interval
 	if state.findOperatingPoint(1) <= 0 {
 		return nil, fmt.Errorf("Vehicle can not move")
 	}
@@ -62,18 +62,13 @@ func (state *SimulatorState)powerAtMotorForce(f float64) float64 {
 	return power
 }
 
-func (state *SimulatorState)CanOperateAtPoint(accel float64) bool {
+func (state *SimulatorState)CanOperateAtPoint(accel float64) (bool, error) {
     vehicle := state.Vehicle
-    	
-	//make sure we are not accelerating over the max motor RPM
-    if state.Speed + (accel * state.Interval) > state.topMotorSpeed {
-        return false
-    }
 	
 	//check that the tires can support the force put onto them
 	tireForce := (accel * vehicle.Weight) + vehicle.AeroDrag(state.Speed)
 	if math.Abs(tireForce) > (vehicle.Tires.Friction * 9.81 * vehicle.Weight) {
-		return false
+		return false, errors.New("Tire friction")
 	}
 	
 	//check that the motors can provide the required torque (or we are braking)
@@ -81,7 +76,7 @@ func (state *SimulatorState)CanOperateAtPoint(accel float64) bool {
 	//any extra needed braking force can be added by the actual brakes
 	motorForce := tireForce + vehicle.RollingDrag(state.Speed)
 	if motorForce > vehicle.PeakForce(state.Speed) {
-		return false
+		return false, errors.New("Motor Torque")
 	}
 	
 	//calculate battery power draw
@@ -89,6 +84,7 @@ func (state *SimulatorState)CanOperateAtPoint(accel float64) bool {
 	
 	//if the battery can't handle maximum regen, the brakes can pick up the slack
 	if math.Abs(power) > vehicle.Battery.maxPower() && motorForce > 0 {
+		state.limitingFactor = "Battery Power"
 		return false
 	}
 	
@@ -96,6 +92,7 @@ func (state *SimulatorState)CanOperateAtPoint(accel float64) bool {
 }
 
 func (state *SimulatorState)findOperatingPoint(targetAccel float64) float64 {
+	state.limitingFactor = "No limiting factor"
 	if state.CanOperateAtPoint(targetAccel) {
 		return targetAccel
 	}
@@ -116,10 +113,11 @@ func (state *SimulatorState)findOperatingPoint(targetAccel float64) float64 {
 	return lastKnownGood
 }
 
-func (state *SimulatorState)Tick(targetAccel float64) float64 {    
+func (state *SimulatorState)Tick(targetAccel float64) (float64, error) {    
     vehicle := state.Vehicle
-         
-	accel := state.findOperatingPoint(targetAccel)
+    interval := state.Interval.Seconds()
+		 
+	accel, err := state.findOperatingPoint(targetAccel)
 	
 	rollingForce := vehicle.RollingDrag(state.Speed)
 	aeroForce 	 :=	vehicle.AeroDrag(state.Speed)
@@ -130,20 +128,20 @@ func (state *SimulatorState)Tick(targetAccel float64) float64 {
 	idealPower := (force * state.Speed) + vehicle.Accessory
 	power := state.powerAtMotorForce(force)
     amps := vehicle.Battery.ampsAtPower(math.Abs(power))
-    state.Coulombs += amps * state.Interval
+    state.Coulombs += amps * interval
     
     // attribute the power loss to each component
     state.PowerUse[AERO] = aeroForce*state.Speed
     state.PowerUse[ROLLING] = rollingForce*state.Speed
   	state.PowerUse[ACCESORY] = vehicle.Accessory
     state.PowerUse[ACCELERATION] = accelForce*state.Speed
-	state.PowerUse[INEFF] = (amps * vehicle.Battery.NominalVoltage) - idealPower
+	state.PowerUse[INEFF] = math.Abs((amps * vehicle.Battery.NominalVoltage) - idealPower)
 	
-    state.Distance += state.Speed * state.Interval
-    state.Speed += accel * state.Interval
+    state.Distance += state.Speed * interval
+    state.Speed += accel * interval
     state.Time += state.Interval
         
-    return accel
+    return accel, err
 }
 
 func (state *SimulatorState)TotalPowerUse() (total float64) {

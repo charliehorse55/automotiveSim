@@ -4,6 +4,7 @@ package automotiveSim
 import (
 	// "time"
 	// "errors"
+	"fmt"
 	"math"
 )
 
@@ -30,37 +31,40 @@ type batteryState struct {
 }
 
 
-func (b *BatteryPack)Init() bool {
+func (b *BatteryPack)Init() error {
 	if b.CellCoulomb <= 0 {
-		return false
+		return fmt.Errorf("Battery cells must store a positive amount of charge")
 	}
 	
 	if b.CellResistance < 0 {
-		return false
+		return fmt.Errorf("Battery cells can not have negative resistance")
 	}
 	
 	if b.CellVoltage <= 0 {
-		return false
+		return fmt.Errorf("Battery cells must have positive nominal voltage")
 	}
 	
-	if b.Series == 0 || b.Parallel == 0 {
-		return false
+	if b.Series == 0 {
+		return fmt.Errorf("Battery pack must have at least one cell in series")
 	}	
+	if b.Parallel == 0 {
+		return fmt.Errorf("Battery pack must have at least one cell in parallel")
+	}
 	
     b.NominalVoltage = b.CellVoltage * float64(b.Series)
     b.Coulomb = b.CellCoulomb * float64(b.Parallel)
     b.InternalResistance = b.CellResistance*float64(b.Series) / float64(b.Parallel)
 	
-	return true
+	return nil
 }
 
 func newBatteryState(b *BatteryPack) *batteryState {
-	return &batteryState{pack:b,  }
+	return &batteryState{pack:b}
 }
 
 func (pack *BatteryPack)ampsAtPower(power float64) float64  {
 	absPow := math.Abs(power)
-    amps := (2 * absPow) / (pack.NominalVoltage  + math.Sqrt(pack.NominalVoltage*pack.NominalVoltage - 4*absPow*pack.InternalResistance))
+    amps := (2 * absPow) / (pack.NominalVoltage + math.Sqrt(pack.NominalVoltage*pack.NominalVoltage - 4*absPow*pack.InternalResistance))
 	return math.Copysign(amps, power)
 
 }

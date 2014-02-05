@@ -40,9 +40,11 @@ func Parse(vehicleJSON interface{}) (*Vehicle, error) {
     if err != nil {
         return nil, err
     }
-    
-    vehicle.Battery.Init()
-    
+  
+    err = vehicle.Battery.Init()
+    if err != nil {
+    }
+	
     return &vehicle, nil
 }
 

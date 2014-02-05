@@ -3,7 +3,6 @@ package automotiveSim
 import "encoding/json"
 import "fmt"
 
-
 type Tire struct {
     Friction float64
     RollingResistance float64
@@ -11,15 +10,17 @@ type Tire struct {
 }
 
 type Vehicle struct {
-    Motors []Motor
+	Powertrain Powertrain
+	
     Weight float64
     CdA float64
+	
     Accessory float64
-    ExternalTemp float64
-    Tires Tire
     Battery BatteryPack
-    ElectricalEff float64
-    DrivetrainEff float64
+	
+	//environmental conditions TODO pull this into it's own data structure
+    ExternalTemp float64
+	
 }
 
 func Parse(vehicleJSON interface{}) (*Vehicle, error) {    
@@ -41,7 +42,21 @@ func Parse(vehicleJSON interface{}) (*Vehicle, error) {
         return nil, err
     }
     
-    vehicle.Battery.Init()
+	initFuncs := []func() error {
+		vehicle.Battery.Init, 
+		vehicle.Tires.Init,
+	}
+	//add the motors
+	for i := range vehicle.Motors {
+		initFuncs = append(initFuncs, vehicle.Motors[i].Init)
+	}
+	
+	for _,function := range initFuncs {
+		err := function()
+		if err != nil {
+			return nil, err
+		}
+	}
     
     return &vehicle, nil
 }

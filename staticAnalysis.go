@@ -19,7 +19,6 @@ func (vehicle *Vehicle)RollingDrag(speed float64) float64 {
 	return vehicle.Weight * 9.81 * vehicle.Tires.RollingResistance
 }
 
-func (vehicle *Vehicle)PowerUse(speed float64) float64 {
-    return (vehicle.Drag(speed) * speed)/(vehicle.ElectricalEff * vehicle.DrivetrainEff) + vehicle.Accessory
+func (vehicle *Vehicle)ShaftSpeed(speed float64) float64 {
+	return (speed / (vehicle.Tires.Radius * math.Pi * 2)) * vehicle.Gearing
 }
-

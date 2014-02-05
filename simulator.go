@@ -4,7 +4,6 @@ import (
 	"math"
 	"fmt"
 	"time"
-	"errors"
 )
 	
 const (
@@ -23,14 +22,14 @@ var PowerDrawSources []string = []string{"Rolling Resistance", "Accessory", "Ine
 type VehiclePowerUse [5]float64
 
 
-
 type SimulatorState struct {
     Vehicle *Vehicle
-    
+    battery *batteryState
+	powertrain *powertrainState
+	
     Time time.Duration
     Speed float64
     Distance float64
-    Coulombs float64
     Interval time.Duration
     PowerUse VehiclePowerUse
 }
@@ -38,7 +37,15 @@ type SimulatorState struct {
 func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
     var state SimulatorState
     state.Vehicle = vehicle
-    state.Interval = 1 * time.Millisecond; // 1ms default interval
+	
+	//initialize the states
+	state.battery = NewBatteryState(vehicle.Battery)
+	state.powertrain = NewPowertrainState(vehicle.Powertrain)
+	
+	// 1ms default interval 
+    state.Interval = 1 * time.Millisecond;
+	
+	//check that the vehicle isn't totally broken
 	if state.findOperatingPoint(1) <= 0 {
 		return nil, fmt.Errorf("Vehicle can not move")
 	}
@@ -46,39 +53,36 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
     return &state, nil
 }
 
-// the total power (as drawn from the main bus) required to produce a force f from the motors at the wheels
-func (state *SimulatorState)powerAtMotorForce(f float64) float64 {
-	vehicle := state.Vehicle
-	power := f * state.Speed
-	
-	if f < 0 {
-		//regen energy flows in the opposite direction, so the losses reduce the amount of energy reclaimed
-		power *= vehicle.ElectricalEff * vehicle.DrivetrainEff
-	} else {
-		//when accelerating, losses just increase the amount of power drawn from the battery
-		power /= vehicle.ElectricalEff * vehicle.DrivetrainEff
-	}
-    power += vehicle.Accessory
-	return power
-}
-
-func (state *SimulatorState)CanOperateAtPoint(accel float64) (bool, error) {
+func (state *SimulatorState)CanOperateAtPoint(accel float64) error {
     vehicle := state.Vehicle
-	
+		
 	//check that the tires can support the force put onto them
 	tireForce := (accel * vehicle.Weight) + vehicle.AeroDrag(state.Speed)
 	if math.Abs(tireForce) > (vehicle.Tires.Friction * 9.81 * vehicle.Weight) {
-		return false, errors.New("Tire friction")
+		return fmt.Errorf("Tire friction")
 	}
 	
-	//check that the motors can provide the required torque (or we are braking)
-	//not Abs of motorForce as negative values indicate regen
-	//any extra needed braking force can be added by the actual brakes
-	motorForce := tireForce + vehicle.RollingDrag(state.Speed)
-	if motorForce > vehicle.PeakForce(state.Speed) {
-		return false, errors.New("Motor Torque")
-	}
+	//the total force that is needed to be provided by the powertrain
+	totalForce := tireForce + vehicle.RollingDrag(state.Speed)
 	
+	//use the total force to estimate power draw
+	//the calculate the bus voltage by asking the battery about voltage sag given power
+	powerEstimate := vehicle.Accessory + state.powertrain.PowerAtTorque(state.Speed, totalForce, state.Interval)
+	
+	
+	
+	
+	motorForce := (totalForce * vehicle.Tires.Radius)/(vehicle.Gearing * vehicle.DrivetrainEff)
+		
+	//just split torque evenly for now
+	shaftSpeed := vehicle.ShaftSpeed(state.Speed)
+	for _,motor := range state.motors {
+		err := motor.canOperate(shaftSpeed, motorForce/len(state.motors),  busVoltage, state.Interval)
+		if err != nil {
+			return err
+		}
+	}
+		
 	//calculate battery power draw
 	power := state.powerAtMotorForce(motorForce)
 	
@@ -89,6 +93,10 @@ func (state *SimulatorState)CanOperateAtPoint(accel float64) (bool, error) {
 	}
 	
 	return true
+}
+
+func (state *SimulatorState)OperateAtPoint(accel float64) {
+	
 }
 
 func (state *SimulatorState)findOperatingPoint(targetAccel float64) float64 {

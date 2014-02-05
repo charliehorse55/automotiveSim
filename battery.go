@@ -3,15 +3,9 @@ package automotiveSim
 
 import (
 	// "time"
-	// "errors"
 	"math"
+	"fmt"
 )
-
-type Battery struct {
-	Voltage float64
-	Resistance float64
-	Coulomb float64
-}
 
 type BatteryPack struct {
     NominalVoltage float64
@@ -25,46 +19,71 @@ type BatteryPack struct {
 }
 
 type batteryState struct {
-	coulombs  float64
+	coulombsUsed float64
 	pack *BatteryPack 	
 }
 
 
-func (b *BatteryPack)Init() bool {
+func (b *BatteryPack)Init() error {
 	if b.CellCoulomb <= 0 {
-		return false
+		return fmt.Errorf("Coulombs per cell must be positive")
 	}
 	
 	if b.CellResistance < 0 {
-		return false
+		return fmt.Errorf("Cell resistance can not be negative")
 	}
 	
 	if b.CellVoltage <= 0 {
-		return false
+		return fmt.Errorf("Cell voltage must be positive")
 	}
 	
-	if b.Series == 0 || b.Parallel == 0 {
-		return false
+	if b.Series <= 0 {
+		return fmt.Errorf("Battery pack must have at least 1 cell in series")
+	}	
+	
+	if b.Parallel <= 0 {
+		return fmt.Errorf("Battery pack must have at least 1 cell in parallel")
 	}	
 	
     b.NominalVoltage = b.CellVoltage * float64(b.Series)
     b.Coulomb = b.CellCoulomb * float64(b.Parallel)
     b.InternalResistance = b.CellResistance*float64(b.Series) / float64(b.Parallel)
 	
-	return true
+	return nil
 }
 
-func newBatteryState(b *BatteryPack) *batteryState {
-	return &batteryState{pack:b,  }
+func NewBatteryState(b *BatteryPack) *batteryState {
+	return &batteryState{pack:b}
 }
 
-func (pack *BatteryPack)ampsAtPower(power float64) float64  {
+func (b *batteryState)CanOperate(current float64, duration time.Duration) error {
+	
+
+	return nil
+}
+
+
+func (b *batteryState)Operate(current float64, duration time.Duration) {
+	
+
+}
+
+
+func (pack *batteryState)AmpsAtPower(power float64) float64  {
 	absPow := math.Abs(power)
     amps := (2 * absPow) / (pack.NominalVoltage  + math.Sqrt(pack.NominalVoltage*pack.NominalVoltage - 4*absPow*pack.InternalResistance))
 	return math.Copysign(amps, power)
-
 }
 
-func (pack *BatteryPack)maxPower() float64 {
+func (b *batteryState)VoltageForPower(power float64) float64 {
+	return power/b.AmpsAtPower(power)
+}
+
+
+func (pack *batteryState)MaxPower() float64 {
     return pack.NominalVoltage*pack.NominalVoltage/(4*pack.InternalResistance)
 }
+
+
+
+

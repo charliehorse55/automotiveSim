@@ -3,7 +3,7 @@ package automotiveSim
 
 import (
 	"time"
-	"errors"
+	"fmt"
 )
 
 type MotorPerformance struct {
@@ -15,6 +15,7 @@ type Motor struct {
 	Peak MotorPerformance
 	Continuous MotorPerformance
     MaxShaftSpeed float64
+	Efficiency float64
 }
 
 type motorState struct {
@@ -22,38 +23,70 @@ type motorState struct {
 	motor *Motor
 }
 
-func (m *Motor)Init() bool {
-	return true //TODO actually check that everything has correct values
+func (m *Motor)Init() error {
+	if m.Peak.Torque < m.Continuous.Torque {
+		return fmt.Errorf("Peak torque must not be less than continuous torque")
+	}
+	if m.Peak.Power < m.Continuous.Power {
+		return fmt.Errorf("Peak power must not be less than continuous power")
+	}
+	if m.Continuous.Torque <= 0 {
+		return fmt.Errorf("Continuous torque must be positive")
+	}
+	if m.Continuous.Power <= 0 {
+		return fmt.Errorf("Continuous power must be positive")
+	}
+	
+	if m.MaxShaftSpeed <= 0 {
+		return fmt.Errorf("Maximum shaft speed must be positive")
+	}
+	
+	if m.Efficiency <= 0 || m.Efficiency > 1 {
+		return fmt.Errorf("Motor efficiency must be on the range (0,1]")
+	}
+	
+	return nil
 }
 
-func newMotorState(m *motor) *motorState {
+func NewMotorState(m *Motor) *motorState {
 	return &motorState{ motor:m, timeAtPeak:0.0}
 }
 
-func (s *motorState)CanOperate(shaftSpeed, torque float64) error {
+func (s *motorState)CanOperate(shaftSpeed, torque, busVoltage float64, duration time.Duration) error {
+	shaftSpeed = math.Abs(shaftSpeed)
+	torque = math.Abs(torque)
+	
 	if shaftSpeed > s.motor.MaxShaftSpeed {
-		return errors.New("Motor Angular Speed")
+		return fmt.Errorf("Motor Angular Velocity")
 	}
 	
 	if torque > s.motor.Peak.Torque {
-		return errors.New("Motor Torque")
+		return fmt.Errorf("Motor Torque")
 	}
 	
 	power := shaftSpeed * torque
-	if torque > s.motor.Peak.Power {
-		return errors.New("Motor Power")
+	if power > s.motor.Peak.Power {
+		return fmt.Errorf("Motor Power")
 	}
 	
 	if torque > s.motor.Continuous.Torque || power > s.motor.Continuous.Power {
-		if s.TimeAtPeak > (time.Second * 20) {
-			return errors.New("Motor Temperature")
+		if s.timeAtPeak > (time.Second * 20) {
+			return fmt.Errorf("Motor Temperature")
 		}
 	}
 
 	return nil
 }
 
-func (s *motorState)Operate(torque, shaftSpeed float64, duration time.Duration) {
+// just calculate power required by an approximation based on a single efficiency value for now
+func (s *motorState)PowerAtTorque(shaftSpeed, torque, duration time.Duration) float64 {
+	return (shaftSpeed * torque) / s.motor.Efficiency
+}
+
+func (s *motorState)Operate(shaftSpeed, torque, busVoltage float64, duration time.Duration) {
+	shaftSpeed = math.Abs(shaftSpeed)
+	torque = math.Abs(torque)
+	
 	overload := 0.0
 	if torque > s.motor.Continuous.Torque {
 		overload = (torque - s.motor.Continuous.Torque)/(s.motor.Peak.Torque - s.motor.Continuous.Torque)
@@ -65,6 +98,10 @@ func (s *motorState)Operate(torque, shaftSpeed float64, duration time.Duration) 
 		if poveload > overload {
 			overload = poveload
 		}
+	}
+	
+	if overload == 0.0 {
+		s.timeAtPeak -= duration / 4
 	}
 	
 	s.timeAtPeak += time.Duration(float64(duration) * overload)

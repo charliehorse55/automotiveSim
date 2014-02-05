@@ -41,14 +41,10 @@ func Parse(vehicleJSON interface{}) (*Vehicle, error) {
     if err != nil {
         return nil, err
     }
-    
+	    
 	initFuncs := []func() error {
 		vehicle.Battery.Init, 
-		vehicle.Tires.Init,
-	}
-	//add the motors
-	for i := range vehicle.Motors {
-		initFuncs = append(initFuncs, vehicle.Motors[i].Init)
+		vehicle.Powertrain.Init,
 	}
 	
 	for _,function := range initFuncs {

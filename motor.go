@@ -19,7 +19,7 @@ type Motor struct {
 }
 
 type motorState struct {
-	timeAtPeak time.Duration
+	// timeAtPeak time.Duration
 	motor *Motor
 }
 
@@ -49,60 +49,24 @@ func (m *Motor)Init() error {
 }
 
 func NewMotorState(m *Motor) *motorState {
-	return &motorState{ motor:m, timeAtPeak:0.0}
+	return &motorState{ motor:m}
 }
 
-func (s *motorState)CanOperate(shaftSpeed, torque, busVoltage float64, duration time.Duration) error {
-	shaftSpeed = math.Abs(shaftSpeed)
-	torque = math.Abs(torque)
-	
-	if shaftSpeed > s.motor.MaxShaftSpeed {
-		return fmt.Errorf("Motor Angular Velocity")
-	}
-	
-	if torque > s.motor.Peak.Torque {
-		return fmt.Errorf("Motor Torque")
-	}
-	
-	power := shaftSpeed * torque
-	if power > s.motor.Peak.Power {
-		return fmt.Errorf("Motor Power")
-	}
-	
-	if torque > s.motor.Continuous.Torque || power > s.motor.Continuous.Power {
-		if s.timeAtPeak > (time.Second * 20) {
-			return fmt.Errorf("Motor Temperature")
-		}
-	}
 
-	return nil
+func (s *motorState)MaxTorque(shaftSpeed float64, duration time.Duration) (float64, string) {
+	if s.motor.Peak.Torque * shaftSpeed > s.motor.Peak.Power { //TODO add code for overheating
+		return s.motor.Peak.Power / shaftSpeed, "Power"
+	}
+	return s.motor.Peak.Torque, "Torque"
 }
 
-// just calculate power required by an approximation based on a single efficiency value for now
-func (s *motorState)PowerAtTorque(shaftSpeed, torque, duration time.Duration) float64 {
-	return (shaftSpeed * torque) / s.motor.Efficiency
-}
-
-func (s *motorState)Operate(shaftSpeed, torque, busVoltage float64, duration time.Duration) {
-	shaftSpeed = math.Abs(shaftSpeed)
-	torque = math.Abs(torque)
-	
-	overload := 0.0
-	if torque > s.motor.Continuous.Torque {
-		overload = (torque - s.motor.Continuous.Torque)/(s.motor.Peak.Torque - s.motor.Continuous.Torque)
+func (s *motorState)Operate(shaftSpeed, torque float64, duration time.Duration) float64 {	
+	//energy transfer direction
+	power := shaftSpeed * torque 
+	if power > 0 {
+		power /= s.motor.Efficiency
+	} else {
+		power *= s.motor.Efficiency
 	}
-	
-	power := torque * shaftSpeed
-	if power > s.motor.Continuous.Power {
-		poveload := (power - s.motor.Continuous.Power)/(s.motor.Peak.Power - s.motor.Continuous.Power)
-		if poveload > overload {
-			overload = poveload
-		}
-	}
-	
-	if overload == 0.0 {
-		s.timeAtPeak -= duration / 4
-	}
-	
-	s.timeAtPeak += time.Duration(float64(duration) * overload)
+	return power
 }

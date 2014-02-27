@@ -8,16 +8,12 @@ import (
 
 const (
 	kph100 = 100 / 3.6
-	quarterMile = 402.33600
+	quarterMile = 402.33600 //quarter mile in meters
 )
 
 type Schedule struct {
     Interval time.Duration
     Speeds []float64
-}
-
-func (state *SimulatorState)energyUsed() float64 {
-    return state.Coulombs * state.Vehicle.Battery.NominalVoltage
 }
 
 type ScheduleResult struct {
@@ -31,21 +27,20 @@ func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
     	return nil, err
     }
 	
-	numTicks := int(input.Interval/sim.Interval)
 	var result ScheduleResult
 	result.Power = make([]float64, len(input.Speeds))
     for i,newSpeed := range input.Speeds {
         accel := (newSpeed - sim.Speed)/input.Interval.Seconds()
 		var powerUsage float64
-        for i := 0; i < numTicks; i++ {
+		target := input.Interval * time.Duration(i)
+		numTicks := 0
+        for sim.Time < target {
             currAccel, err := sim.Tick(accel);
             if err != nil {
 				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f) (%v)", accel, currAccel, err)
             }
-			if sim.Coulombs > vehicle.Battery.Coulomb {
-				return nil, fmt.Errorf("Battery depleted before end of test")
-			}
 			powerUsage += sim.TotalPowerUse()
+			numTicks++
         }
 		result.Power[i] = powerUsage/float64(numTicks)
     }
@@ -119,7 +114,7 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 type PowerDraw struct {
 	Sources []string
 	Speeds []float64
-	Magnitude []VehiclePowerUse
+	Magnitude []PowerUse
 }
 
 func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
@@ -129,17 +124,19 @@ func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
     }
 	
 	var power PowerDraw
-	power.Sources = make([]string, len(PowerDrawSources))
-	copy(power.Sources, PowerDrawSources)
 	power.Speeds = speeds
-	power.Magnitude = make([]VehiclePowerUse, len(speeds))
+	power.Magnitude = make([]PowerUse, len(speeds))
 	for i,speed := range speeds {
 		sim.Speed = speed
-		currAccel, _ := sim.Tick(0)
+		currAccel, err := sim.Tick(0)
 		if math.Abs(currAccel) > 0.01 {
-			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f", speed)
-		} 
-		power.Magnitude[i] = sim.PowerUse
+			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f: %v", speed, err)
+		}
+		//copy the map
+		power.Magnitude[i] = make(PowerUse)
+		for key,value := range sim.PowerUses {
+			power.Magnitude[i][key] = value
+		}
 	}
 	return &power, nil
 }

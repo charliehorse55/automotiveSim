@@ -14,11 +14,3 @@ func (vehicle *Vehicle)Drag(speed float64) float64 {
 func (vehicle *Vehicle)AeroDrag(speed float64) float64 {
     return 0.5 * vehicle.CdA * speed * speed * airDensity(vehicle.ExternalTemp) //aero
 }
-
-func (vehicle *Vehicle)RollingDrag(speed float64) float64 {
-	return vehicle.Weight * 9.81 * vehicle.Tires.RollingResistance
-}
-
-func (vehicle *Vehicle)ShaftSpeed(speed float64) float64 {
-	return (speed / (vehicle.Tires.Radius * math.Pi * 2)) * vehicle.Gearing
-}

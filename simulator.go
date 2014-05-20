@@ -1,7 +1,6 @@
 package automotiveSim
 
 import (
-	"math"
 	"fmt"
 	"time"
 )
@@ -10,18 +9,17 @@ const (
 	gravity = 9.81
 )
 
-type PowerUse map[string]float64
-
 type SimulatorState struct {
     Vehicle *Vehicle
     battery *batteryState
 	body *bodyState
 	
+	ExternalTemp float64
     Time time.Duration
     Speed float64
     Distance float64
     Interval time.Duration
-    PowerUses PowerUse
+	Power Power
 	BusVoltage float64
 }
 
@@ -29,18 +27,25 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
     var state SimulatorState
     state.Vehicle = vehicle
 	
-	//initialize the states
+	//initialize the map of power use
+	state.Power = make(Power)
+	
 	state.battery = NewBatteryState(&vehicle.Battery)
+	state.BusVoltage = state.battery.pack.NominalVoltage
+	state.Power["Battery"] = state.battery.power
+	
 	state.body = NewBodyState(&vehicle.Body)
+	state.Power["Body"] = state.body.power
 
 	// 1ms default interval 
-    state.Interval = 1 * time.Millisecond;
+    state.Interval = 1 * time.Millisecond	
 	
-	//initialize the map of power use
-	state.PowerUses = make(PowerUse)
+	//SATP, 25 degrees C 
+	state.ExternalTemp = 298.15 
 	
-	//check that the vehicle isn't totally broken
-	accel, err := state.findOperatingPoint(1)
+	
+	//check that the vehicle can actually move
+	accel, err := state.FindOperatingPoint(1)
 	if accel <= 0 {
 		return nil, fmt.Errorf("Vehicle can not move: %v", err)
 	}
@@ -48,29 +53,43 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
     return &state, nil
 }
 
-func (state *SimulatorState)CanOperateAtPoint(accel float64) error {
+func (state *SimulatorState)CanOperate(accel float64) error {
     vehicle := state.Vehicle
 	
 	powerUse := 0.0
 	
-	tractionPower, err := state.body.CanOperate(accel, state.Interval)
+	tractionPower, err := state.body.CanOperate(state, accel, state.Interval)
 	if err != nil {
 		return err
 	}
 	powerUse += tractionPower
 	powerUse += vehicle.Accessory
-		
 	
+	err = state.battery.CanOperate(state, powerUse, state.Interval)
+	if err != nil {
+		return err
+	}
 		
-	return true
+	return nil
 }
 
-func (state *SimulatorState)OperateAtPoint(accel float64) {
+func (state *SimulatorState)Operate(accel float64) {
+	power := state.body.Operate(state, accel, state.Interval)
+	power += state.Vehicle.Accessory
+	state.Power["Accessory"] = state.Vehicle.Accessory
 	
+	state.BusVoltage = state.battery.Operate(state, power, state.Interval)
+	
+	
+	interval := state.Interval.Seconds()
+    state.Distance += state.Speed * interval
+    state.Speed += accel * interval
+    state.Time += state.Interval
 }
 
-func (state *SimulatorState)findOperatingPoint(targetAccel float64) (float64, error) {
-	if state.CanOperateAtPoint(targetAccel) {
+func (state *SimulatorState)FindOperatingPoint(targetAccel float64) (float64, error) {
+	err := state.CanOperate(targetAccel) 
+	if err == nil {
 		return targetAccel, nil
 	}
 	
@@ -80,7 +99,7 @@ func (state *SimulatorState)findOperatingPoint(targetAccel float64) (float64, er
 	lastKnownGood := 0.0
 	var lastErr error
 	for step > 0.001 {
-		err := state.CanOperateAtPoint(guess) 
+		err := state.CanOperate(guess) 
 		if err != nil {
 			guess -= step
 			lastErr = err
@@ -94,34 +113,18 @@ func (state *SimulatorState)findOperatingPoint(targetAccel float64) (float64, er
 }
 
 func (state *SimulatorState)Tick(targetAccel float64) (float64, error) {    
-    vehicle := state.Vehicle
-    interval := state.Interval.Seconds()
-		 
-	accel, err := state.findOperatingPoint(targetAccel)
-	
-	rollingForce := vehicle.RollingDrag(state.Speed)
-	aeroForce 	 :=	vehicle.AeroDrag(state.Speed)
-	accelForce   := accel * vehicle.Weight
-		            
-    //calculate battery draw
-	force := aeroForce + rollingForce + accelForce
-	idealPower := (force * state.Speed) + vehicle.Accessory
-	power := state.powerAtMotorForce(force)
-    amps := vehicle.Battery.ampsAtPower(math.Abs(power))
-    	
-    state.Distance += state.Speed * interval
-    state.Speed += accel * interval
-    state.Time += state.Interval
-        
-    return accel, err
+	accel, err := state.FindOperatingPoint(targetAccel)
+	state.Operate(accel)
+	return accel, err
 }
 
-func (state *SimulatorState)TotalPowerUse() (total float64) {
-	total := 0.0
-	for _,power := range state.PowerUse {
-		total += power
-	}
-	return total
+func (state *SimulatorState)TotalPowerUse() (float64) {
+	// total := 0.0
+	// for _,power := range state.PowerUse {
+	// 	total += power
+	// }
+	// return total
+	return 0.0
 }
 
 

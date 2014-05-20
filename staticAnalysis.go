@@ -1,16 +1,17 @@
 package automotiveSim
 
-import "math"
-
 
 func airDensity(temperature float64) float64 {
-    return (100000/((temperature+273.15)*287.058)) //ideal gas law
+    return (100000/((temperature)*287.058)) //ideal gas law
 }
 
-func (vehicle *Vehicle)Drag(speed float64) float64 {
-	return vehicle.RollingDrag(speed) + vehicle.AeroDrag(speed)
+//calculates energy transfer based on direction of energy flow
+//and system efficiency 
+func et(amount, efficiency float64) float64 {
+	if(amount > 0) {
+		return amount / efficiency
+	} else {
+		return amount * efficiency
+	}
 }
 
-func (vehicle *Vehicle)AeroDrag(speed float64) float64 {
-    return 0.5 * vehicle.CdA * speed * speed * airDensity(vehicle.ExternalTemp) //aero
-}

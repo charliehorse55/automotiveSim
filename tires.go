@@ -18,7 +18,6 @@ func (t *Tire)Init() error {
 	if t.RollingResistance < 0 {
 		return fmt.Errorf("Tire rolling resistance must not be negative")
 	}
-	
 	if t.Radius <= 0 {
 		return fmt.Errorf("Tire radius must be positive")
 	}

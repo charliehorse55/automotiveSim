@@ -56,10 +56,12 @@ type LimitingReason struct {
 type AccelProfile struct {
 	TopSpeed float64
 	Accel100 float64
-	QuarterMile float64
 	AccelTop float64
+	QuarterMile float64
 	PeakAccel float64
 	Limits []LimitingReason
+	Profile []float64
+	PowerUse Power
 }
 
 func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
@@ -69,10 +71,16 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
     }
 	
 	var result AccelProfile
-	
+
+	speedInterval := time.Millisecond * 10
+	var currTime time.Duration
 	reasonIndex := 0
 	for result.TopSpeed == 0 || result.QuarterMile == 0 {
-		currAccel, err := sim.Tick(10000) //attempt to accelerate at 10,000 m/s^2
+		//attempt to accelerate at 1,000 m/s^2
+		//it's a binary search, so it only slows things down log(n)
+		//so start with a huge n. This gurantees we are always
+		//accelerating at maximum speed
+		currAccel, err := sim.Tick(1000) 
 		currReason := err.Error()
 		
 		if result.Limits == nil {
@@ -107,39 +115,62 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 				result.Accel100 = math.NaN()
 			}
 		}
+		currTime += sim.Interval
+		if currTime > speedInterval {
+			result.Profile = append(result.Profile, sim.Speed)
+			currTime -= speedInterval
+		}
 	}
+	result.PowerUse = sim.Power
+	//clean up transistions
+	// pos := 0
+	// var extraTime time.Duration
+	// for i := range result.Limits {
+	// 	time := result.Limits[i].Duration
+	// 	if (time <= (sim.Interval * 10)) {
+	// 		extraTime += time
+	// 	} else if (pos > 0 && result.Limits[i].Reason == result.Limits[pos - 1].Reason) {
+	// 		result.Limits[pos - 1].Duration += time
+	// 	} else {
+	// 		result.Limits[i].Duration += extraTime
+	// 		extraTime = 0
+	// 		result.Limits[pos] = result.Limits[i]
+	// 		pos++
+	// 	}
+	// }
+	// result.Limits = result.Limits[:pos]
 	return result, nil
 }
 
-type PowerDraw struct {
-	Sources []string
-	Speeds []float64
-	Magnitude []PowerUse
-}
-
-func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
-	sim, err := InitSimulation(vehicle)
-    if err != nil {
-    	return nil, err
-    }
-	
-	var power PowerDraw
-	power.Speeds = speeds
-	power.Magnitude = make([]PowerUse, len(speeds))
-	for i,speed := range speeds {
-		sim.Speed = speed
-		currAccel, err := sim.Tick(0)
-		if math.Abs(currAccel) > 0.01 {
-			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f: %v", speed, err)
-		}
-		//copy the map
-		power.Magnitude[i] = make(PowerUse)
-		for key,value := range sim.PowerUses {
-			power.Magnitude[i][key] = value
-		}
-	}
-	return &power, nil
-}
+// type PowerDraw struct {
+// 	Sources []string
+// 	Speeds []float64
+// 	Magnitude []PowerUse
+// }
+// 
+// func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
+// 	sim, err := InitSimulation(vehicle)
+//     if err != nil {
+//     	return nil, err
+//     }
+// 	
+// 	var power PowerDraw
+// 	power.Speeds = speeds
+// 	power.Magnitude = make([]PowerUse, len(speeds))
+// 	for i,speed := range speeds {
+// 		sim.Speed = speed
+// 		currAccel, err := sim.Tick(0)
+// 		if math.Abs(currAccel) > 0.01 {
+// 			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f: %v", speed, err)
+// 		}
+// 		//copy the map
+// 		power.Magnitude[i] = make(PowerUse)
+// 		for key,value := range sim.PowerUses {
+// 			power.Magnitude[i][key] = value
+// 		}
+// 	}
+// 	return &power, nil
+// }
 
 
 

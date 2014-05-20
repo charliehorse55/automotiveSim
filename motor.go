@@ -4,6 +4,7 @@ package automotiveSim
 import (
 	"time"
 	"fmt"
+	"math"
 )
 
 type MotorPerformance struct {
@@ -12,6 +13,7 @@ type MotorPerformance struct {
 }
 
 type Motor struct {
+	Name string
 	Peak MotorPerformance
 	Continuous MotorPerformance
     MaxShaftSpeed float64
@@ -21,6 +23,7 @@ type Motor struct {
 type motorState struct {
 	// timeAtPeak time.Duration
 	motor *Motor
+	power Power
 }
 
 func (m *Motor)Init() error {
@@ -49,24 +52,34 @@ func (m *Motor)Init() error {
 }
 
 func NewMotorState(m *Motor) *motorState {
-	return &motorState{ motor:m}
+	return &motorState{motor:m, power:make(Power)}
 }
 
-
-func (s *motorState)MaxTorque(shaftSpeed float64, duration time.Duration) (float64, string) {
-	if s.motor.Peak.Torque * shaftSpeed > s.motor.Peak.Power { //TODO add code for overheating
-		return s.motor.Peak.Power / shaftSpeed, "Power"
-	}
-	return s.motor.Peak.Torque, "Torque"
+func (s *motorState)powerUse(shaftSpeed, torque float64) (mechanical, loss float64) {
+	mechanical = shaftSpeed * torque
+	total := et(mechanical, s.motor.Efficiency)
+	loss = math.Abs(total) * (1 - s.motor.Efficiency)
+	return
 }
 
-func (s *motorState)Operate(shaftSpeed, torque float64, duration time.Duration) float64 {	
-	//energy transfer direction
-	power := shaftSpeed * torque 
-	if power > 0 {
-		power /= s.motor.Efficiency
-	} else {
-		power *= s.motor.Efficiency
+func (s *motorState)CanOperate(sim *SimulatorState, shaftSpeed, torque float64, duration time.Duration) (float64, error) {
+	// TODO add code for overheating
+	if math.Abs(shaftSpeed) > s.motor.MaxShaftSpeed {
+		return 0, fmt.Errorf("Maximum Shaft speed")
 	}
-	return power
+	if math.Abs(torque) > s.motor.Peak.Torque {
+		return 0, fmt.Errorf("Maximum Torque")
+	}
+	if math.Abs(torque * shaftSpeed) > s.motor.Peak.Power {
+		return 0, fmt.Errorf("Maximum Power")
+	}
+	mech, loss := s.powerUse(shaftSpeed, torque)
+	return mech + loss, nil
+}
+
+func (s *motorState)Operate(sim *SimulatorState, shaftSpeed, torque float64, duration time.Duration) float64 {
+	mech, loss := s.powerUse(shaftSpeed, torque)
+	s.power["Losses"] = loss
+	s.power["Mechanical"] = mech
+	return mech + loss
 }

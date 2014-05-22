@@ -17,7 +17,7 @@ type Schedule struct {
 }
 
 type ScheduleResult struct {
-	Power []float64
+	Energy float64
 	Distance float64
 }
 
@@ -28,10 +28,8 @@ func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
     }
 	
 	var result ScheduleResult
-	result.Power = make([]float64, len(input.Speeds))
     for i,newSpeed := range input.Speeds {
         accel := (newSpeed - sim.Speed)/input.Interval.Seconds()
-		var powerUsage float64
 		target := input.Interval * time.Duration(i)
 		numTicks := 0
         for sim.Time < target {
@@ -39,10 +37,9 @@ func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
             if err != nil {
 				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f) (%v)", accel, currAccel, err)
             }
-			powerUsage += sim.TotalPowerUse()
+			result.Energy += sim.Power.Total() * sim.Interval.Seconds()
 			numTicks++
         }
-		result.Power[i] = powerUsage/float64(numTicks)
     }
 	result.Distance = sim.Distance
     return &result, nil
@@ -61,7 +58,6 @@ type AccelProfile struct {
 	PeakAccel float64
 	Limits []LimitingReason
 	Profile []float64
-	PowerUse Power
 }
 
 func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
@@ -121,7 +117,6 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 			currTime -= speedInterval
 		}
 	}
-	result.PowerUse = sim.Power
 	//clean up transistions
 	// pos := 0
 	// var extraTime time.Duration
@@ -142,35 +137,36 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 	return result, nil
 }
 
-// type PowerDraw struct {
-// 	Sources []string
-// 	Speeds []float64
-// 	Magnitude []PowerUse
-// }
-// 
-// func (vehicle *Vehicle)PowerAtSpeeds(speeds []float64) (*PowerDraw, error) {
-// 	sim, err := InitSimulation(vehicle)
-//     if err != nil {
-//     	return nil, err
-//     }
-// 	
-// 	var power PowerDraw
-// 	power.Speeds = speeds
-// 	power.Magnitude = make([]PowerUse, len(speeds))
-// 	for i,speed := range speeds {
-// 		sim.Speed = speed
-// 		currAccel, err := sim.Tick(0)
-// 		if math.Abs(currAccel) > 0.01 {
-// 			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f: %v", speed, err)
-// 		}
-// 		//copy the map
-// 		power.Magnitude[i] = make(PowerUse)
-// 		for key,value := range sim.PowerUses {
-// 			power.Magnitude[i][key] = value
-// 		}
-// 	}
-// 	return &power, nil
-// }
+func (vehicle *Vehicle)EfficiencyAtSpeeds(speeds []float64) (map[string][]float64, error) {
+	sim, err := InitSimulation(vehicle)
+    if err != nil {
+    	return nil, err
+    }
+	
+	eff := make(map[string][]float64)
+	causes := []string{"Aerodynamics", "Rolling Resistance", "Accessory", "Losses"}
+	for _,cause := range causes {
+		eff[cause] = make([]float64, len(speeds))
+	}
+	
+	for i,speed := range speeds {
+		sim.Speed = speed
+		currAccel, err := sim.Tick(0)
+		if math.Abs(currAccel) > 0.01 {
+			return nil, fmt.Errorf("Vehicle can not maintain speed %5.2f: %v", speed, err)
+		}
+		//copy the map
+		total := sim.Power.Total()/speed
+		aero := sim.body.AeroDrag(sim)
+		tire := sim.body.RollingDrag(sim)
+		accessory := sim.Power["Accessory"].(float64)/speed
+		eff["Accessory"][i] = accessory
+		eff["Aerodynamics"][i] = aero
+		eff["Rolling Resistance"][i] = tire
+		eff["Losses"][i] = total - (accessory + aero + tire)
+	}
+	return eff, nil
+}
 
 
 

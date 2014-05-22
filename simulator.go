@@ -118,14 +118,6 @@ func (state *SimulatorState)Tick(targetAccel float64) (float64, error) {
 	return accel, err
 }
 
-func (state *SimulatorState)TotalPowerUse() (float64) {
-	// total := 0.0
-	// for _,power := range state.PowerUse {
-	// 	total += power
-	// }
-	// return total
-	return 0.0
-}
 
 
 

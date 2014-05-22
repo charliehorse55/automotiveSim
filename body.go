@@ -159,7 +159,7 @@ func (s *bodyState)Operate(sim *SimulatorState, accel float64, duration time.Dur
 		//motor calculations
 		shaftSpeed := (sim.Speed / d.drive.Tires.Radius) * d.drive.Gearing
 		shaftTorque := (splitForce * d.drive.Tires.Radius) / (d.drive.Gearing)
-		shaftTorque = et(shaftTorque*shaftSpeed, d.drive.Efficiency)/shaftSpeed
+		shaftTorque = et(shaftTorque, d.drive.Efficiency)
 		loss := math.Abs(shaftSpeed * shaftTorque) * (1 - d.drive.Efficiency)
 		motorPower := d.motor.Operate(sim, shaftSpeed, shaftTorque, duration)
 		totalPower += motorPower

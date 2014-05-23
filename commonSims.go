@@ -9,6 +9,7 @@ import (
 const (
 	kph100 = 100 / 3.6
 	quarterMile = 402.33600 //quarter mile in meters
+	causeFilter = 100 //number of simulation intervals
 )
 
 type Schedule struct {
@@ -47,7 +48,7 @@ func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
 
 type LimitingReason struct {
 	Reason string
-	Duration time.Duration
+	Start time.Duration
 }
 
 type AccelProfile struct {
@@ -70,26 +71,19 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 
 	speedInterval := time.Millisecond * 10
 	var currTime time.Duration
-	reasonIndex := 0
+	lastReason := ""
 	for result.TopSpeed == 0 || result.QuarterMile == 0 {
 		//attempt to accelerate at 1,000 m/s^2
 		//it's a binary search, so it only slows things down log(n)
 		//so start with a huge n. This gurantees we are always
 		//accelerating at maximum speed
-		currAccel, err := sim.Tick(1000) 
+		currAccel, err := sim.Tick(1000)
 		currReason := err.Error()
 		
-		if result.Limits == nil {
-			result.Limits = make([]LimitingReason, 1)
-			result.Limits[0].Reason = currReason
+		if currReason != lastReason {
+			result.Limits = append(result.Limits, LimitingReason{Reason:currReason, Start:sim.Time})
 		}
-		
-		if currReason == result.Limits[reasonIndex].Reason {
-			result.Limits[reasonIndex].Duration += sim.Interval
-		} else {
-			result.Limits = append(result.Limits, LimitingReason{Reason:currReason, Duration:sim.Interval})
-			reasonIndex++
-		}
+		lastReason = currReason
 		
 		if currAccel > result.PeakAccel {
 			result.PeakAccel = currAccel
@@ -118,22 +112,20 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 		}
 	}
 	//clean up transistions
-	// pos := 0
-	// var extraTime time.Duration
-	// for i := range result.Limits {
-	// 	time := result.Limits[i].Duration
-	// 	if (time <= (sim.Interval * 10)) {
-	// 		extraTime += time
-	// 	} else if (pos > 0 && result.Limits[i].Reason == result.Limits[pos - 1].Reason) {
-	// 		result.Limits[pos - 1].Duration += time
-	// 	} else {
-	// 		result.Limits[i].Duration += extraTime
-	// 		extraTime = 0
-	// 		result.Limits[pos] = result.Limits[i]
-	// 		pos++
-	// 	}
-	// }
-	// result.Limits = result.Limits[:pos]
+	pos := len(result.Limits) - 1
+	lastStart := time.Hour * 1000000
+	for i := pos; i >= 0; i-- {
+		timeSinceLast := lastStart - result.Limits[i].Start
+		if (timeSinceLast >= (sim.Interval * causeFilter)) {
+			lastStart = result.Limits[i].Start
+			result.Limits[pos] = result.Limits[i]
+			pos--
+		}
+	}
+	pos++
+	fmt.Printf("pos = %d\n", pos)
+	copy(result.Limits[:len(result.Limits) - pos], result.Limits[pos:])
+	result.Limits = result.Limits[:len(result.Limits) - pos]
 	return result, nil
 }
 

@@ -13,6 +13,7 @@ const (
 )
 
 type Schedule struct {
+	Name string	
     Interval time.Duration
     Speeds []float64
 }
@@ -22,12 +23,7 @@ type ScheduleResult struct {
 	Distance float64
 }
 
-func (input *Schedule)Run(vehicle *Vehicle) (*ScheduleResult, error) {
-    sim, err := InitSimulation(vehicle)
-    if err != nil {
-    	return nil, err
-    }
-	
+func (sim *SimulatorState)Run(input *Schedule) (*ScheduleResult, error) {	
 	var result ScheduleResult
     for i,newSpeed := range input.Speeds {
         accel := (newSpeed - sim.Speed)/input.Interval.Seconds()
@@ -123,7 +119,6 @@ func (vehicle *Vehicle)RunAccelerationProfile() (AccelProfile, error) {
 		}
 	}
 	pos++
-	fmt.Printf("pos = %d\n", pos)
 	copy(result.Limits[:len(result.Limits) - pos], result.Limits[pos:])
 	result.Limits = result.Limits[:len(result.Limits) - pos]
 	return result, nil

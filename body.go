@@ -159,7 +159,9 @@ func (s *bodyState)Operate(sim *SimulatorState, accel float64, duration time.Dur
 		//motor calculations
 		shaftSpeed := (sim.Speed / d.drive.Tires.Radius) * d.drive.Gearing
 		shaftTorque := (splitForce * d.drive.Tires.Radius) / (d.drive.Gearing)
-		shaftTorque = et(shaftTorque, d.drive.Efficiency)
+		if shaftSpeed != 0 {
+			shaftTorque = et(shaftTorque*shaftSpeed, d.drive.Efficiency)/shaftSpeed
+		}
 		loss := math.Abs(shaftSpeed * shaftTorque) * (1 - d.drive.Efficiency)
 		motorPower := d.motor.Operate(sim, shaftSpeed, shaftTorque, duration)
 		totalPower += motorPower
@@ -185,7 +187,7 @@ func (s *bodyState)RollingDrag(sim *SimulatorState) float64 {
 }
 
 func (s *bodyState)AeroDrag(sim *SimulatorState) float64 {
-    return 0.5 * s.body.CdA * sim.Speed * sim.Speed * airDensity(sim.ExternalTemp) //aero
+    return 0.5 * s.body.CdA * sim.Speed * sim.Speed * airDensity(sim.Vehicle.Ambient.Temperature, sim.Vehicle.Ambient.Pressure) //aero
 }
 
 

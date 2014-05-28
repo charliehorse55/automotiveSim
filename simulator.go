@@ -14,8 +14,7 @@ type SimulatorState struct {
     battery *batteryState
 	body *bodyState
 	
-	ExternalTemp float64
-    Time time.Duration
+	Time time.Duration
     Speed float64
     Distance float64
     Interval time.Duration
@@ -37,13 +36,9 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
 	state.body = NewBodyState(&vehicle.Body)
 	state.Power["Body"] = state.body.power
 
-	// 1ms default interval 
+	//1ms default interval 
     state.Interval = 1 * time.Millisecond	
-	
-	//SATP, 25 degrees C 
-	state.ExternalTemp = 298.15 
-	
-	
+		
 	//check that the vehicle can actually move
 	accel, err := state.FindOperatingPoint(1)
 	if accel <= 0 {

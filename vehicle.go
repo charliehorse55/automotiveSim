@@ -1,10 +1,12 @@
 package automotiveSim
 
 
+
 type Vehicle struct {
     Accessory float64
     Battery BatteryPack
 	Body Body
+	Ambient Ambient
 }
 
 
@@ -12,6 +14,7 @@ func (v *Vehicle)Init() error {
 	initFuncs := []func() error {
 		v.Battery.Init,
 		v.Body.Init,
+		v.Ambient.Init,
  	}
 	
 	

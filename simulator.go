@@ -11,14 +11,15 @@ const (
 
 type SimulatorState struct {
     Vehicle *Vehicle
-    battery *batteryState
-	body *bodyState
+    Battery *batteryState
+	Body *bodyState
 	
 	Time time.Duration
     Speed float64
     Distance float64
     Interval time.Duration
 	Power Power
+	Resources map[string]float64
 	BusVoltage float64
 }
 
@@ -29,12 +30,14 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
 	//initialize the map of power use
 	state.Power = make(Power)
 	
-	state.battery = NewBatteryState(&vehicle.Battery)
-	state.BusVoltage = state.battery.pack.NominalVoltage
-	state.Power["Battery"] = state.battery.power
+	state.Resources = make(map[string]float64)
 	
-	state.body = NewBodyState(&vehicle.Body)
-	state.Power["Body"] = state.body.power
+	state.Battery = NewBatteryState(&vehicle.Battery)
+	state.BusVoltage = state.Battery.pack.NominalVoltage
+	state.Power["Battery"] = state.Battery.power
+	
+	state.Body = NewBodyState(&vehicle.Body)
+	state.Power["Body"] = state.Body.power
 
 	//1ms default interval 
     state.Interval = 1 * time.Millisecond	
@@ -53,14 +56,14 @@ func (state *SimulatorState)CanOperate(accel float64) error {
 	
 	powerUse := 0.0
 	
-	tractionPower, err := state.body.CanOperate(state, accel, state.Interval)
+	tractionPower, err := state.Body.CanOperate(state, accel, state.Interval)
 	if err != nil {
 		return err
 	}
 	powerUse += tractionPower
 	powerUse += vehicle.Accessory
 	
-	err = state.battery.CanOperate(state, powerUse, state.Interval)
+	err = state.Battery.CanOperate(state, powerUse, state.Interval)
 	if err != nil {
 		return err
 	}
@@ -69,12 +72,11 @@ func (state *SimulatorState)CanOperate(accel float64) error {
 }
 
 func (state *SimulatorState)Operate(accel float64) {
-	power := state.body.Operate(state, accel, state.Interval)
+	power := state.Body.Operate(state, accel, state.Interval)
 	power += state.Vehicle.Accessory
 	state.Power["Accessory"] = state.Vehicle.Accessory
-	
-	state.BusVoltage = state.battery.Operate(state, power, state.Interval)
-	
+	state.BusVoltage = state.Battery.Operate(state, power, state.Interval)
+		
 	
 	interval := state.Interval.Seconds()
     state.Distance += state.Speed * interval
@@ -112,7 +114,6 @@ func (state *SimulatorState)Tick(targetAccel float64) (float64, error) {
 	state.Operate(accel)
 	return accel, err
 }
-
 
 
 

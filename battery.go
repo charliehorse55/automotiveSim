@@ -18,6 +18,7 @@ type BatteryPack struct {
     CellResistance float64
     CellCoulomb float64
 	CellMaxCurrent float64
+	ChargerEfficency float64
 }
 
 type batteryState struct {
@@ -80,8 +81,11 @@ func (s *batteryState)CanOperate(sim *SimulatorState, power float64, duration ti
 
 func (s *batteryState)Operate(sim *SimulatorState, power float64, duration time.Duration) float64 {
 	amp := s.AmpsAtPower(power)
-	s.coulombsUsed += amp * duration.Seconds()
-	s.power["Internal Resistance"] = (amp*s.pack.NominalVoltage) - power
+	time := duration.Seconds()
+	s.coulombsUsed += amp * time
+	totalUsed := (amp*s.pack.NominalVoltage)
+	s.power["Internal Resistance"] = totalUsed - power
+	sim.Resources["Electricity"] += (totalUsed * time) / 0.85
 	return power/amp
 }
 
@@ -92,6 +96,10 @@ func (s *batteryState)VoltageAtPower(power float64) float64  {
 
 func (s *batteryState)AmpsAtPower(power float64) float64 {
 	return power/s.VoltageAtPower(power)
+}
+
+func (s *batteryState)StateOfCharge() float64 {
+	return 1.0 - (s.coulombsUsed/s.pack.Coulomb)
 }
 
 

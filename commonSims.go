@@ -18,28 +18,18 @@ type Schedule struct {
     Speeds []float64
 }
 
-type ScheduleResult struct {
-	Energy float64
-	Distance float64
-}
-
-func (sim *SimulatorState)Run(input *Schedule) (*ScheduleResult, error) {	
-	var result ScheduleResult
+func (sim *SimulatorState)Run(input *Schedule) (error) {	
     for i,newSpeed := range input.Speeds {
         accel := (newSpeed - sim.Speed)/input.Interval.Seconds()
 		target := input.Interval * time.Duration(i)
-		numTicks := 0
         for sim.Time < target {
             currAccel, err := sim.Tick(accel);
             if err != nil {
-				return nil, fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f) (%v)", accel, currAccel, err)
+				return fmt.Errorf("Vehicle failed to accelerate at %5.2fm/s (only %5.2f) (%v)", accel, currAccel, err)
             }
-			result.Energy += sim.Power.Total() * sim.Interval.Seconds()
-			numTicks++
         }
     }
-	result.Distance = sim.Distance
-    return &result, nil
+    return nil
 }
 
 type LimitingReason struct {
@@ -144,8 +134,8 @@ func (vehicle *Vehicle)EfficiencyAtSpeeds(speeds []float64) (map[string][]float6
 		}
 		//copy the map
 		total := sim.Power.Total()/speed
-		aero := sim.body.AeroDrag(sim)
-		tire := sim.body.RollingDrag(sim)
+		aero := sim.Body.AeroDrag(sim)
+		tire := sim.Body.RollingDrag(sim)
 		accessory := sim.Power["Accessory"].(float64)/speed
 		eff["Accessory"][i] = accessory
 		eff["Aerodynamics"][i] = aero

@@ -17,6 +17,5 @@ func (a *Ambient)Init() error {
 	if a.Pressure < 0 {
 		return fmt.Errorf("Pressure can not be negative")
 	}
-	
 	return nil
 }

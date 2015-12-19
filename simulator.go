@@ -11,8 +11,6 @@ const (
 
 type SimulatorState struct {
     Vehicle *Vehicle
-    Battery *batteryState
-	Body *bodyState
 	
 	Time time.Duration
     Speed float64
@@ -39,8 +37,8 @@ func InitSimulation(vehicle *Vehicle) (*SimulatorState, error) {
 	state.Body = NewBodyState(&vehicle.Body)
 	state.Power["Body"] = state.Body.power
 
-	//1ms default interval 
-    state.Interval = 1 * time.Millisecond	
+	//10ms default interval 
+    state.Interval = 10 * time.Millisecond	
 		
 	//check that the vehicle can actually move
 	accel, err := state.FindOperatingPoint(1)
@@ -56,14 +54,14 @@ func (state *SimulatorState)CanOperate(accel float64) error {
 	
 	powerUse := 0.0
 	
-	tractionPower, err := state.Body.CanOperate(state, accel, state.Interval)
+	tractionPower, err := state.Body.CanOperate(state, accel)
 	if err != nil {
 		return err
 	}
 	powerUse += tractionPower
 	powerUse += vehicle.Accessory
 	
-	err = state.Battery.CanOperate(state, powerUse, state.Interval)
+	err = state.Battery.CanOperate(state, powerUse)
 	if err != nil {
 		return err
 	}
@@ -72,10 +70,10 @@ func (state *SimulatorState)CanOperate(accel float64) error {
 }
 
 func (state *SimulatorState)Operate(accel float64) {
-	power := state.Body.Operate(state, accel, state.Interval)
+	power := state.Body.Operate(state, accel)
 	power += state.Vehicle.Accessory
 	state.Power["Accessory"] = state.Vehicle.Accessory
-	state.BusVoltage = state.Battery.Operate(state, power, state.Interval)
+	state.BusVoltage = state.Battery.Operate(state, power)
 		
 	
 	interval := state.Interval.Seconds()
@@ -110,9 +108,9 @@ func (state *SimulatorState)FindOperatingPoint(targetAccel float64) (float64, er
 }
 
 func (state *SimulatorState)Tick(targetAccel float64) (float64, error) {    
-	accel, err := state.FindOperatingPoint(targetAccel)
+	accel, limit := state.FindOperatingPoint(targetAccel)
 	state.Operate(accel)
-	return accel, err
+	return accel, limit
 }
 
 

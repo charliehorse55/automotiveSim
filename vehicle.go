@@ -4,7 +4,7 @@ package automotiveSim
 
 type Vehicle struct {
     Accessory float64
-    Battery BatteryPack
+    Battery Battery
 	Body Body
 	Ambient Ambient
 }
